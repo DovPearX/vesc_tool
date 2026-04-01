@@ -18,38 +18,20 @@
     */
 
 #include <QLispCompleter>
+#include <QLispSymbolDB>
 #include <QLanguage>
 #include <QStringListModel>
 #include <QFile>
-#include <QStandardItemModel>
+#include <QSet>
 
 QLispCompleter::QLispCompleter(QObject *parent) :
     QCompleter(parent)
 {
-    QStandardItemModel *model = new QStandardItemModel(this);
-    QVector<QStandardItem *> parents(10);
-    parents[0] = model->invisibleRootItem();
-    int level = 0;
-    QStringList level0Names;
+    QSet<QString> unique;
 
-    auto addItem = [&](QString text) {
-        if (level == 0) {
-            if (level0Names.contains(text)) {
-                return;
-            }
-
-            level0Names.append(text);
-        }
-
-        QStandardItem *item = new QStandardItem;
-        item->setText(text);
-        parents[level]->appendRow(item);
-        parents[level + 1] = item;
-
-        if (parents.size() <= (level + 1)) {
-            parents.resize(parents.size() * 2);
-        }
-    };
+    for (const LispSymbol &sym : QLispSymbolDB::all()) {
+        unique.insert(sym.name);
+    }
 
     Q_INIT_RESOURCE(qcodeeditor_resources);
     QFile fl(":/languages/lisp.xml");
@@ -61,7 +43,7 @@ QLispCompleter::QLispCompleter(QObject *parent) :
             auto keys = language.keys();
             foreach (auto&& key, keys) {
                 for (auto name: language.names(key)) {
-                    addItem(name);
+                    unique.insert(name);
                 }
             }
         }
@@ -69,10 +51,12 @@ QLispCompleter::QLispCompleter(QObject *parent) :
         fl.close();
     }
 
-    setCompletionMode(QCompleter::PopupCompletion);
+    QStringList symbols = unique.values();
+    symbols.sort(Qt::CaseInsensitive);
 
-    setModel(model);
-    setModelSorting(QCompleter::UnsortedModel);
+    setModel(new QStringListModel(symbols, this));
+    setCompletionMode(QCompleter::PopupCompletion);
+    setModelSorting(QCompleter::CaseInsensitivelySortedModel);
     setCaseSensitivity(Qt::CaseInsensitive);
     setWrapAround(true);
 }

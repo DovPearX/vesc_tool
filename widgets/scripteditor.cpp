@@ -24,6 +24,7 @@
 #include <LispHighlighter>
 #include <QVescCompleter>
 #include <QLispCompleter>
+#include <QLispSignatureHelp>
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QSettings>
@@ -31,7 +32,8 @@
 
 ScriptEditor::ScriptEditor(QWidget *parent) :
     QWidget(parent),
-    ui(new Ui::ScriptEditor)
+    ui(new Ui::ScriptEditor),
+    mLispSigHelp(nullptr)
 {
     ui->setupUi(this);
     mIsModeLisp = false;
@@ -79,6 +81,7 @@ ScriptEditor::ScriptEditor(QWidget *parent) :
 
 ScriptEditor::~ScriptEditor()
 {
+    delete mLispSigHelp;
     delete ui;
 }
 
@@ -110,6 +113,11 @@ void ScriptEditor::setFileNow(QString fileName)
 
 void ScriptEditor::setModeQml()
 {
+    if (mLispSigHelp) {
+        delete mLispSigHelp;
+        mLispSigHelp = nullptr;
+    }
+
     ui->codeEdit->setHighlighter(new QmlHighlighter);
     ui->codeEdit->setCompleter(new QVescCompleter);
     ui->codeEdit->setHighlightBlocks(false);
@@ -120,6 +128,11 @@ void ScriptEditor::setModeLisp()
 {
     ui->codeEdit->setHighlighter(new LispHighlighter);
     ui->codeEdit->setCompleter(new QLispCompleter);
+
+    if (!mLispSigHelp) {
+        mLispSigHelp = new QLispSignatureHelp(ui->codeEdit);
+    }
+
     ui->codeEdit->setCommentStr(";");
     ui->codeEdit->setIndentStrs("{(", "})");
     ui->codeEdit->setAutoParentheses(true);

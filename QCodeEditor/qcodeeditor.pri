@@ -1,4 +1,6 @@
 HEADERS += \
+    $$PWD/include/internal/QLispSignatureHelp.hpp \
+    $$PWD/include/internal/QLispSymbolDB.hpp \
     $$PWD/include/internal/LispHighlighter.hpp \
     $$PWD/include/internal/QCodeEditor.hpp \
     $$PWD/include/internal/QCXXHighlighter.hpp \
@@ -22,6 +24,8 @@ HEADERS += \
     $$PWD/include/internal/QVescCompleter.hpp
 
 SOURCES += \
+    $$PWD/src/internal/QLispSignatureHelp.cpp \
+    $$PWD/src/internal/QLispSymbolDB.cpp \
     $$PWD/src/internal/LispHighlighter.cpp \
     $$PWD/src/internal/QCodeEditor.cpp \
     $$PWD/src/internal/QCXXHighlighter.cpp \

@@ -28,6 +28,8 @@ namespace Ui {
 class ScriptEditor;
 }
 
+class QLispSignatureHelp;
+
 class ScriptEditor : public QWidget
 {
     Q_OBJECT
@@ -73,6 +75,7 @@ private slots:
 private:
     Ui::ScriptEditor *ui;
     bool mIsModeLisp;
+    QLispSignatureHelp *mLispSigHelp;
     QFileSystemWatcher mFsWatcher;
 
 };

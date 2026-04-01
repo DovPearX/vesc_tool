@@ -2,6 +2,7 @@
 
 // QCodeEditor
 #include <QStyleSyntaxHighlighter> // Required for inheritance
+#include <QHighlightBlockRule>
 #include <QHighlightRule>
 
 // Qt
@@ -30,8 +31,9 @@ protected:
 
 private:
     QVector<QHighlightRule> m_highlightRules;
-    QVector<QHighlightRule> m_highlightRulesLang;
-    QRegularExpression m_keyRegex;
+    QVector<QHighlightBlockRule> m_blockRules;
+    QRegularExpression m_functionPattern;
+    QRegularExpression m_definitionPattern;
 
 };
 
