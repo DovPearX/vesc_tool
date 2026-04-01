@@ -11,7 +11,7 @@ DisplayCanvas::DisplayCanvas(int width, int height, QWidget *parent)
     s_instance = this;
     mBuffer = QImage(width, height, QImage::Format_RGB32);
     mBuffer.fill(Qt::black);
-    setMinimumSize(width, height);
+    setFixedSize(width, height);
     setStyleSheet("background-color: black;");
     
     mPalette.resize(256);
@@ -29,6 +29,7 @@ void DisplayCanvas::setImageData(const uint8_t *data, int width, int height, Col
     mWidth = width;
     mHeight = height;
     mFormat = format;
+    setFixedSize(width, height);
     
     int dataSize = width * height;
     
@@ -169,7 +170,14 @@ QImage DisplayCanvas::convertToRGB32()
 
 void DisplayCanvas::paintEvent(QPaintEvent *event)
 {
+    Q_UNUSED(event);
+
     QPainter painter(this);
-    QRect targetRect = rect();
-    painter.drawImage(targetRect, mBuffer);
+    painter.fillRect(rect(), Qt::black);
+
+    if (mBuffer.isNull() || mBuffer.width() <= 0 || mBuffer.height() <= 0) {
+        return;
+    }
+
+    painter.drawImage(QPoint(0, 0), mBuffer);
 }

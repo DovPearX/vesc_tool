@@ -22,9 +22,11 @@
 #include <QProgressDialog>
 #include <QGroupBox>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLabel>
+#include <QVBoxLayout>
 #include "pagelisp.h"
 #include "ui_pagelisp.h"
 #include "utility.h"
@@ -84,6 +86,7 @@ PageLisp::PageLisp(QWidget *parent) :
     ui->setupUi(this);
     mVesc = nullptr;
     mLocalEval = nullptr;
+    mDisplayTab = nullptr;
     mDisplayCanvas = nullptr;
 
     QSettings settings;
@@ -216,8 +219,7 @@ PageLisp::PageLisp(QWidget *parent) :
     ui->bindingPlot->xAxis->setLabel("Age (s)");
     ui->bindingPlot->yAxis->setLabel("Value");
     ui->bindingPlot->xAxis->setRangeReversed(true);
-    mDisplayCanvas = new DisplayCanvas(320, 240, this);
-    ui->tabWidget->addTab(mDisplayCanvas, "Display");
+    createDisplayTab();
     
     createSettingsTab();
 }
@@ -554,6 +556,29 @@ void PageLisp::evalLocalExpression(const QString &code)
     if (mLocalEval && mLocalEval->isRunning()) {
         mLocalEval->eval(code);
     }
+}
+
+void PageLisp::createDisplayTab()
+{
+    mDisplayTab = new QWidget(this);
+    mDisplayTab->setStyleSheet("background-color: #484848;");
+
+    QVBoxLayout *outerLayout = new QVBoxLayout(mDisplayTab);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+
+    QHBoxLayout *centerLayout = new QHBoxLayout();
+    centerLayout->setContentsMargins(12, 12, 12, 12);
+    centerLayout->addStretch();
+
+    mDisplayCanvas = new DisplayCanvas(mDisplayWidth, mDisplayHeight, mDisplayTab);
+    centerLayout->addWidget(mDisplayCanvas, 0, Qt::AlignCenter);
+    centerLayout->addStretch();
+
+    outerLayout->addStretch();
+    outerLayout->addLayout(centerLayout);
+    outerLayout->addStretch();
+
+    ui->tabWidget->addTab(mDisplayTab, "Display");
 }
 
 void PageLisp::createEditorTab(QString fileName, QString content)
@@ -1158,13 +1183,22 @@ void PageLisp::on_displaySizeChanged()
 {
     resetLocalEvaluator();
 
-    if (mDisplayCanvas) {
-        ui->tabWidget->removeTab(ui->tabWidget->indexOf(mDisplayCanvas));
-        delete mDisplayCanvas;
+    if (mDisplayTab) {
+        int index = ui->tabWidget->indexOf(mDisplayTab);
+        if (index >= 0) {
+            ui->tabWidget->removeTab(index);
+        }
+        delete mDisplayTab;
+        mDisplayTab = nullptr;
+        mDisplayCanvas = nullptr;
     }
-    
-    mDisplayCanvas = new DisplayCanvas(mDisplayWidth, mDisplayHeight, this);
-    ui->tabWidget->insertTab(4, mDisplayCanvas, "Display");
+
+    createDisplayTab();
+    int displayIndex = ui->tabWidget->indexOf(mDisplayTab);
+    if (displayIndex >= 0 && displayIndex != 4) {
+        ui->tabWidget->removeTab(displayIndex);
+        ui->tabWidget->insertTab(4, mDisplayTab, "Display");
+    }
     ui->tabWidget->setCurrentIndex(4);
 }
 

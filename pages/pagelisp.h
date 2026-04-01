@@ -82,6 +82,7 @@ private:
     QMap<QString, QVector<QPair<qint64, double> > > mBindingData;
     CodeLoader mLoader;
     QLispBM *mLocalEval;
+    QWidget *mDisplayTab;
     DisplayCanvas *mDisplayCanvas;
     
     int mDisplayWidth = 320;
@@ -104,6 +105,7 @@ private:
     void stopLocalEvaluator();
     void runLocalProgram();
     void evalLocalExpression(const QString &code);
+    void createDisplayTab();
     void createSettingsTab();
     int requiredImageWords() const;
     int requiredMemoryBlocks() const;
