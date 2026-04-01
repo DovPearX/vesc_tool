@@ -32,6 +32,7 @@ HEADERS += \
     $$PWD/parameditint.h \
     $$PWD/displaybar.h \
     $$PWD/displaypercentage.h \
+    $$PWD/displaycanvas.h \
     $$PWD/helpdialog.h \
     $$PWD/mrichtextedit.h \
     $$PWD/mtextedit.h \
@@ -70,6 +71,7 @@ SOURCES += \
     $$PWD/parameditint.cpp \
     $$PWD/displaybar.cpp \
     $$PWD/displaypercentage.cpp \
+    $$PWD/displaycanvas.cpp \
     $$PWD/helpdialog.cpp \
     $$PWD/mrichtextedit.cpp \
     $$PWD/mtextedit.cpp \

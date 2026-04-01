@@ -20,10 +20,62 @@
 #include <QDateTime>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QGroupBox>
+#include <QGridLayout>
+#include <QSpinBox>
+#include <QPushButton>
+#include <QLabel>
 #include "pagelisp.h"
 #include "ui_pagelisp.h"
 #include "utility.h"
 #include "widgets/helpdialog.h"
+#include "QLispBM.h"
+
+extern "C" {
+#include "extensions.h"
+#include "print.h"
+#include "eval_cps.h"
+#include "extensions/display_extensions.h"
+}
+
+static bool display_render_callback(image_buffer_t *img, uint16_t x, uint16_t y, color_t *colors) {
+    DisplayCanvas *canvas = DisplayCanvas::instance();
+    if (!canvas || !img || !img->data) {
+        return false;
+    }
+    
+    DisplayCanvas::ColorFormat fmt;
+    switch (img->fmt) {
+        case indexed2: fmt = DisplayCanvas::Indexed2; break;
+        case indexed4: fmt = DisplayCanvas::Indexed4; break;
+        case indexed16: fmt = DisplayCanvas::Indexed16; break;
+        case rgb332: fmt = DisplayCanvas::RGB332; break;
+        case rgb565: fmt = DisplayCanvas::RGB565; break;
+        case rgb888: fmt = DisplayCanvas::RGB888; break;
+        default: return false;
+    }
+    
+    canvas->setImageData(img->data, img->width, img->height, fmt);
+    return true;
+}
+
+static void display_clear_callback(uint32_t color) {
+    DisplayCanvas *canvas = DisplayCanvas::instance();
+    if (canvas) {
+        canvas->clearScreen();
+    }
+}
+
+static void display_reset_callback(void) {
+    DisplayCanvas *canvas = DisplayCanvas::instance();
+    if (canvas) {
+        canvas->clearScreen();
+    }
+}
+
+static int ceil_div(int value, int divisor) {
+    return (value + divisor - 1) / divisor;
+}
 
 PageLisp::PageLisp(QWidget *parent) :
     QWidget(parent),
@@ -31,6 +83,14 @@ PageLisp::PageLisp(QWidget *parent) :
 {
     ui->setupUi(this);
     mVesc = nullptr;
+    mLocalEval = nullptr;
+    mDisplayCanvas = nullptr;
+
+    QSettings settings;
+    mDisplayWidth = settings.value("pagelisp/local_display_width", mDisplayWidth).toInt();
+    mDisplayHeight = settings.value("pagelisp/local_display_height", mDisplayHeight).toInt();
+    mHeapCells = settings.value("pagelisp/local_heap_cells", mHeapCells).toInt();
+    mMemoryBlocks = settings.value("pagelisp/local_memory_blocks", mMemoryBlocks).toInt();
 
     Utility::setPlotColors(ui->bindingPlot);
 
@@ -156,6 +216,10 @@ PageLisp::PageLisp(QWidget *parent) :
     ui->bindingPlot->xAxis->setLabel("Age (s)");
     ui->bindingPlot->yAxis->setLabel("Value");
     ui->bindingPlot->xAxis->setRangeReversed(true);
+    mDisplayCanvas = new DisplayCanvas(320, 240, this);
+    ui->tabWidget->addTab(mDisplayCanvas, "Display");
+    
+    createSettingsTab();
 }
 
 PageLisp::~PageLisp()
@@ -167,6 +231,11 @@ PageLisp::~PageLisp()
 void PageLisp::saveStateToSettings()
 {
     QSettings set;
+    set.setValue("pagelisp/local_display_width", mDisplayWidth);
+    set.setValue("pagelisp/local_display_height", mDisplayHeight);
+    set.setValue("pagelisp/local_heap_cells", mHeapCells);
+    set.setValue("pagelisp/local_memory_blocks", mMemoryBlocks);
+
     {
         set.remove("pagelisp/recentfiles");
         set.beginWriteArray("pagelisp/recentfiles");
@@ -376,14 +445,115 @@ void PageLisp::makeEditorConnections(ScriptEditor *editor)
         on_stopButton_clicked();
     });
     connect(editor->codeEditor(), &QCodeEditor::runBlockTriggered, [this](QString text) {
-        if (text.length() > 400) {
-            CodeLoader loader;
-            loader.setVesc(mVesc);
-            loader.lispStreamString(text, 0);
+        if (mVesc && mVesc->isPortConnected()) {
+            if (text.length() > 400) {
+                CodeLoader loader;
+                loader.setVesc(mVesc);
+                loader.lispStreamString(text, 0);
+            } else if (mVesc) {
+                mVesc->commands()->lispSendReplCmd(text);
+            }
         } else {
-            mVesc->commands()->lispSendReplCmd(text);
+            evalLocalExpression(text);
         }
     });
+}
+
+void PageLisp::ensureLocalEvaluator()
+{
+    if (!mLocalEval) {
+        mLocalEval = new QLispBM(this);
+
+        connect(mLocalEval, &QLispBM::output, this, [this](const QString &text) {
+            ui->debugEdit->doAtEndWithScroll([text](QTextCursor cursor) {
+                cursor.insertText(text);
+            });
+
+            int maxLines = QSettings().value("scripting/replMaxLines", 5000).toInt();
+            ui->debugEdit->trimKeepingLastLines(maxLines);
+        });
+
+        connect(mLocalEval, &QLispBM::evalFinished, this, [this](int cid, const QString &result) {
+            Q_UNUSED(cid);
+            ui->debugEdit->doAtEndWithScroll([result](QTextCursor cursor) {
+                cursor.insertText(result + "\n");
+            });
+        });
+
+        connect(mLocalEval, &QLispBM::evalFailed, this, [this](int cid, const QString &error) {
+            Q_UNUSED(cid);
+            ui->debugEdit->doAtEndWithScroll([error](QTextCursor cursor) {
+                cursor.insertHtml(QString("<font color=\"red\">%1</font><br>").arg(error.toHtmlEscaped()));
+            });
+        });
+    }
+
+    if (!mLocalEval->isInitialized()) {
+        QLispBMConfig config;
+        config.extensions = QLispBMConfig::ExtAll;
+        config.heapCells = qMax(mHeapCells, 16384);
+        config.memoryBlocks = qMax(mMemoryBlocks, requiredMemoryBlocks());
+        config.imageWords = requiredImageWords();
+        if (!mLocalEval->init(&config)) {
+            return;
+        }
+        
+        lbm_display_extensions_set_callbacks(
+            (bool(*)(image_buffer_t*, uint16_t, uint16_t, color_t*))display_render_callback,
+            (void(*)(uint32_t))display_clear_callback,
+            (void(*)(void))display_reset_callback
+        );
+    }
+
+    if (!mLocalEval->isRunning()) {
+        mLocalEval->start();
+    }
+}
+
+void PageLisp::resetLocalEvaluator()
+{
+    if (!mLocalEval) {
+        return;
+    }
+
+    if (mLocalEval->isRunning()) {
+        mLocalEval->stop();
+    }
+
+    delete mLocalEval;
+    mLocalEval = nullptr;
+}
+
+void PageLisp::stopLocalEvaluator()
+{
+    if (mLocalEval && mLocalEval->isRunning()) {
+        mLocalEval->stop();
+    }
+}
+
+void PageLisp::runLocalProgram()
+{
+    auto editor = qobject_cast<ScriptEditor*>(ui->fileTabs->widget(ui->fileTabs->currentIndex()));
+
+    if (!editor) {
+        if (mVesc) {
+            mVesc->emitMessageDialog(tr("No tab is open"), tr(""), false);
+        }
+        return;
+    }
+
+    ensureLocalEvaluator();
+    if (mLocalEval && mLocalEval->isRunning()) {
+        mLocalEval->evalProgram(editor->contentAsText());
+    }
+}
+
+void PageLisp::evalLocalExpression(const QString &code)
+{
+    ensureLocalEvaluator();
+    if (mLocalEval && mLocalEval->isRunning()) {
+        mLocalEval->eval(code);
+    }
 }
 
 void PageLisp::createEditorTab(QString fileName, QString content)
@@ -622,16 +792,29 @@ void PageLisp::on_exampleList_doubleClicked()
 
 void PageLisp::on_runButton_clicked()
 {
-    mVesc->commands()->lispSetRunning(1);
+    if (mVesc && mVesc->isPortConnected()) {
+        mVesc->commands()->lispSetRunning(1);
+    } else {
+        runLocalProgram();
+    }
 }
 
 void PageLisp::on_stopButton_clicked()
 {
-    mVesc->commands()->lispSetRunning(0);
+    if (mVesc && mVesc->isPortConnected()) {
+        mVesc->commands()->lispSetRunning(0);
+    } else {
+        stopLocalEvaluator();
+    }
 }
 
 void PageLisp::on_uploadButton_clicked()
 {
+    if (!(mVesc && mVesc->isPortConnected())) {
+        runLocalProgram();
+        return;
+    }
+
     QProgressDialog dialog(tr("Erasing..."), tr("Cancel"), 0, 0, this);
     dialog.setWindowModality(Qt::WindowModal);
     dialog.show();
@@ -697,6 +880,10 @@ void PageLisp::on_uploadButton_clicked()
 
 void PageLisp::on_readExistingButton_clicked()
 {
+    if (!(mVesc && mVesc->isPortConnected())) {
+        return;
+    }
+
     QProgressDialog dialog(tr("Reading Code..."), tr("Cancel"), 0, 0, this);
     dialog.setWindowModality(Qt::WindowModal);
     dialog.show();
@@ -731,6 +918,10 @@ void PageLisp::on_readExistingButton_clicked()
 
 void PageLisp::on_eraseButton_clicked()
 {
+    if (!(mVesc && mVesc->isPortConnected())) {
+        return;
+    }
+
     eraseCode(16);
 }
 
@@ -771,17 +962,33 @@ void PageLisp::on_helpButton_clicked()
 
 void PageLisp::on_replEdit_returnPressed()
 {
-    mVesc->commands()->lispSendReplCmd(ui->replEdit->text());
+    QString cmd = ui->replEdit->text().trimmed();
+
+    if (mVesc && mVesc->isPortConnected()) {
+        mVesc->commands()->lispSendReplCmd(cmd);
+    } else {
+        evalLocalExpression(cmd);
+    }
+
     ui->replEdit->clear();
 }
 
 void PageLisp::on_replHelpButton_clicked()
 {
-    mVesc->commands()->lispSendReplCmd(":help");
+    if (mVesc && mVesc->isPortConnected()) {
+        mVesc->commands()->lispSendReplCmd(":help");
+    } else {
+        evalLocalExpression("(help)");
+    }
 }
 
 void PageLisp::on_streamButton_clicked()
 {
+    if (!(mVesc && mVesc->isPortConnected())) {
+        runLocalProgram();
+        return;
+    }
+
     QProgressDialog dialog(tr("Streaming..."), QString(), 0, 0, this);
     dialog.setWindowModality(Qt::WindowModal);
     dialog.show();
@@ -867,4 +1074,120 @@ void PageLisp::on_infoButton_clicked()
                    arg(reduceEnabled);
 
     HelpDialog::showHelpMonospace(this, "File Info", html);
+}
+
+void PageLisp::createSettingsTab()
+{
+    QWidget *settingsWidget = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(settingsWidget);
+    
+    QGroupBox *displayGroup = new QGroupBox("Display Settings", settingsWidget);
+    QGridLayout *displayLayout = new QGridLayout(displayGroup);
+    
+    displayLayout->addWidget(new QLabel("Width:"), 0, 0);
+    QSpinBox *widthSpinBox = new QSpinBox();
+    widthSpinBox->setMinimum(16);
+    widthSpinBox->setMaximum(1280);
+    widthSpinBox->setValue(mDisplayWidth);
+    displayLayout->addWidget(widthSpinBox, 0, 1);
+    
+    displayLayout->addWidget(new QLabel("Height:"), 1, 0);
+    QSpinBox *heightSpinBox = new QSpinBox();
+    heightSpinBox->setMinimum(16);
+    heightSpinBox->setMaximum(960);
+    heightSpinBox->setValue(mDisplayHeight);
+    displayLayout->addWidget(heightSpinBox, 1, 1);
+    
+    QPushButton *applyDisplayButton = new QPushButton("Apply Display Size");
+    connect(applyDisplayButton, &QPushButton::clicked, [this, widthSpinBox, heightSpinBox]() {
+        mDisplayWidth = widthSpinBox->value();
+        mDisplayHeight = heightSpinBox->value();
+        on_displaySizeChanged();
+    });
+    displayLayout->addWidget(applyDisplayButton, 2, 0, 1, 2);
+    
+    layout->addWidget(displayGroup);
+    
+    QGroupBox *memoryGroup = new QGroupBox("LispBM Memory Settings", settingsWidget);
+    QGridLayout *memoryLayout = new QGridLayout(memoryGroup);
+    
+    memoryLayout->addWidget(new QLabel("Heap Cells:"), 0, 0);
+    QSpinBox *heapSpinBox = new QSpinBox();
+    heapSpinBox->setMinimum(1024);
+    heapSpinBox->setMaximum(262144);
+    heapSpinBox->setValue(mHeapCells);
+    heapSpinBox->setSingleStep(1024);
+    memoryLayout->addWidget(heapSpinBox, 0, 1);
+    
+    memoryLayout->addWidget(new QLabel("Memory Blocks:"), 1, 0);
+    QSpinBox *blockSpinBox = new QSpinBox();
+    blockSpinBox->setMinimum(256);
+    blockSpinBox->setSingleStep(64);
+    blockSpinBox->setMaximum(16384);
+    blockSpinBox->setValue(mMemoryBlocks);
+    memoryLayout->addWidget(blockSpinBox, 1, 1);
+
+    QLabel *requiredMemLabel = new QLabel(
+        QString("Minimum recommended blocks for %1x%2 rgb888: %3")
+            .arg(mDisplayWidth)
+            .arg(mDisplayHeight)
+            .arg(requiredMemoryBlocks())
+    );
+    requiredMemLabel->setStyleSheet("color: gray; font-size: 12px;");
+    memoryLayout->addWidget(requiredMemLabel, 2, 0, 1, 2);
+    
+    QLabel *infoLabel = new QLabel("Changes restart the local evaluator so new img-buffer allocations use the updated limits.");
+    infoLabel->setStyleSheet("color: gray; font-size: 18px;");
+    memoryLayout->addWidget(infoLabel, 3, 0, 1, 2);
+    
+    QPushButton *applyMemoryButton = new QPushButton("Apply Memory Settings");
+    connect(applyMemoryButton, &QPushButton::clicked, [this, heapSpinBox, blockSpinBox]() {
+        mHeapCells = heapSpinBox->value();
+        mMemoryBlocks = blockSpinBox->value();
+        on_memorySettingsChanged();
+    });
+    memoryLayout->addWidget(applyMemoryButton, 4, 0, 1, 2);
+    
+    layout->addWidget(memoryGroup);
+    layout->addStretch();
+    
+    ui->tabWidget->addTab(settingsWidget, "Settings");
+}
+
+void PageLisp::on_displaySizeChanged()
+{
+    resetLocalEvaluator();
+
+    if (mDisplayCanvas) {
+        ui->tabWidget->removeTab(ui->tabWidget->indexOf(mDisplayCanvas));
+        delete mDisplayCanvas;
+    }
+    
+    mDisplayCanvas = new DisplayCanvas(mDisplayWidth, mDisplayHeight, this);
+    ui->tabWidget->insertTab(4, mDisplayCanvas, "Display");
+    ui->tabWidget->setCurrentIndex(4);
+}
+
+void PageLisp::on_memorySettingsChanged()
+{
+    resetLocalEvaluator();
+
+    if (mVesc) {
+        mVesc->emitStatusMessage(QString("Memory settings applied (Heap: %1, Blocks: %2, Required blocks: %3).")
+                                .arg(mHeapCells).arg(mMemoryBlocks).arg(requiredMemoryBlocks()), true);
+    }
+}
+
+int PageLisp::requiredImageWords() const
+{
+    const int imageBytes = (mDisplayWidth * mDisplayHeight * 3) + 5;
+    return qMax(32768, ceil_div(imageBytes, int(sizeof(uint32_t))));
+}
+
+int PageLisp::requiredMemoryBlocks() const
+{
+    const int imageBytes = (mDisplayWidth * mDisplayHeight * 3) + 5;
+    const int imageBlocks = ceil_div(imageBytes, 64);
+
+    return qMax(512, imageBlocks + 768);
 }

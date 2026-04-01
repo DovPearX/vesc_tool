@@ -23,7 +23,10 @@
 #include <QWidget>
 #include "vescinterface.h"
 #include "widgets/scripteditor.h"
+#include "widgets/displaycanvas.h"
 #include "codeloader.h"
+
+class QLispBM;
 
 namespace Ui {
 class PageLisp;
@@ -66,6 +69,10 @@ private slots:
     void on_exampleFilterEdit_textChanged(const QString &arg1);
     void on_infoButton_clicked();
 
+private slots:
+    void on_displaySizeChanged();
+    void on_memorySettingsChanged();
+
 private:
     Ui::PageLisp *ui;
     VescInterface *mVesc;
@@ -74,6 +81,14 @@ private:
     QTimer mPollTimer;
     QMap<QString, QVector<QPair<qint64, double> > > mBindingData;
     CodeLoader mLoader;
+    QLispBM *mLocalEval;
+    DisplayCanvas *mDisplayCanvas;
+    
+    int mDisplayWidth = 320;
+    int mDisplayHeight = 240;
+    
+    int mHeapCells = 16384;
+    int mMemoryBlocks = 160;
 
     void updateRecentList();
     void makeEditorConnections(ScriptEditor *editor);
@@ -84,7 +99,14 @@ private:
     void openExample();
     void openRecentList();
     bool eraseCode(int size);
-
+    void ensureLocalEvaluator();
+    void resetLocalEvaluator();
+    void stopLocalEvaluator();
+    void runLocalProgram();
+    void evalLocalExpression(const QString &code);
+    void createSettingsTab();
+    int requiredImageWords() const;
+    int requiredMemoryBlocks() const;
 };
 
 #endif // PAGELISP_H
