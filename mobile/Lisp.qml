@@ -11,8 +11,10 @@ import Vedder.vesc.utility 1.0
 import Vedder.vesc.codeloader 1.0
 import Vedder.vesc.logwriter 1.0
 
-Item {
+Pane {
     id: lispPageItem
+    padding: 0
+    font.pointSize: 10
 
     property var dialogParent: ApplicationWindow.overlay
     property Commands mCommands: VescIf.commands()
@@ -22,7 +24,7 @@ Item {
     property real lispHeapUse: 0
     property real lispMemUse: 0
     property int statsPollHz: 2
-    property int editorFontSize: 12
+    property int editorFontSize: 10
 
     function fileUrlToPath(url) {
         var path = decodeURIComponent(url.toString())
@@ -351,24 +353,32 @@ Item {
 
                     Button {
                         text: "Upload"
+                        leftPadding: 6
+                        rightPadding: 6
                         Layout.fillWidth: true
                         onClicked: workaroundTimerUpload.start()
                     }
 
                     Button {
                         text: "Read"
+                        leftPadding: 6
+                        rightPadding: 6
                         Layout.fillWidth: true
                         onClicked: workaroundTimerRead.start()
                     }
 
                     Button {
                         text: "Erase"
+                        leftPadding: 6
+                        rightPadding: 6
                         Layout.fillWidth: true
                         onClicked: mLoader.lispErase(16)
                     }
 
                     Button {
                         text: "Stream"
+                        leftPadding: 6
+                        rightPadding: 6
                         Layout.fillWidth: true
                         onClicked: workaroundTimerStream.start()
                     }
@@ -522,6 +532,7 @@ Item {
                         readOnly: true
                         wrapMode: TextArea.NoWrap
                         font.family: "DejaVu Sans Mono"
+                        font.pointSize: editorFontSize
                         color: Utility.getAppHexColor("lightText")
                     }
                 }
