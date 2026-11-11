@@ -21,6 +21,7 @@
 #define DISPLAYPERCENTAGE_H
 
 #include <QWidget>
+#include <QTimer>
 
 class DisplayPercentage : public QWidget
 {
@@ -48,6 +49,9 @@ private:
     QString mText;
     bool mIsDual;
     double mValue;
+    QTimer mUpdateTimer;
+
+    void scheduleUpdate();
 
 };
 

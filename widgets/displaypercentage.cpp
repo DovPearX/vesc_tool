@@ -29,6 +29,10 @@ DisplayPercentage::DisplayPercentage(QWidget *parent) : QWidget(parent)
     mText = "";
     mIsDual = false;
     mValue = 0.0;
+
+    mUpdateTimer.setSingleShot(true);
+    mUpdateTimer.setInterval(33);
+    connect(&mUpdateTimer, &QTimer::timeout, this, qOverload<>(&QWidget::update));
 }
 
 QString DisplayPercentage::text() const
@@ -38,8 +42,11 @@ QString DisplayPercentage::text() const
 
 void DisplayPercentage::setText(const QString &text)
 {
+    if (mText == text) {
+        return;
+    }
     mText = text;
-    update();
+    scheduleUpdate();
 }
 
 bool DisplayPercentage::isDual() const
@@ -49,8 +56,11 @@ bool DisplayPercentage::isDual() const
 
 void DisplayPercentage::setDual(bool hasNegative)
 {
+    if (mIsDual == hasNegative) {
+        return;
+    }
     mIsDual = hasNegative;
-    update();
+    scheduleUpdate();
 }
 
 double DisplayPercentage::value() const
@@ -60,8 +70,18 @@ double DisplayPercentage::value() const
 
 void DisplayPercentage::setValue(double value)
 {
+    if (mValue == value) {
+        return;
+    }
     mValue = value;
-    update();
+    scheduleUpdate();
+}
+
+void DisplayPercentage::scheduleUpdate()
+{
+    if (!mUpdateTimer.isActive()) {
+        mUpdateTimer.start();
+    }
 }
 
 void DisplayPercentage::paintEvent(QPaintEvent *event)
