@@ -292,8 +292,7 @@ bool Utility::requestBleScanPermission()
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
     QtAndroidPrivate::PermissionResult r = QtAndroidPrivate::checkPermission("android.permission.BLUETOOTH_SCAN").result();
     if(r == QtAndroidPrivate::PermissionResult::Denied) {
-        QtAndroidPrivate::requestPermissions( QStringList() << "android.permission.BLUETOOTH_SCAN");
-        r = QtAndroidPrivate::checkPermission("android.permission.BLUETOOTH_SCAN").result();
+        r = QtAndroidPrivate::requestPermission("android.permission.BLUETOOTH_SCAN").result();
         if(r == QtAndroidPrivate::PermissionResult::Denied) {
             return false;
         }
@@ -314,8 +313,7 @@ bool Utility::requestBleConnectPermission()
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
     QtAndroidPrivate::PermissionResult r = QtAndroidPrivate::checkPermission("android.permission.BLUETOOTH_CONNECT").result();
     if(r == QtAndroidPrivate::PermissionResult::Denied) {
-        QtAndroidPrivate::requestPermissions( QStringList() << "android.permission.BLUETOOTH_CONNECT");
-        r = QtAndroidPrivate::checkPermission("android.permission.BLUETOOTH_CONNECT").result();
+        r = QtAndroidPrivate::requestPermission("android.permission.BLUETOOTH_CONNECT").result();
         if(r == QtAndroidPrivate::PermissionResult::Denied) {
             return false;
         }
@@ -1624,10 +1622,10 @@ void Utility::stopGnssForegroundService()
 bool Utility::isBleScanEnabled()
 {
 #ifdef Q_OS_ANDROID
-    // return QAndroidJniObject::callStaticMethod<jboolean>("com/vedder/vesc/Utils",
-    //                                                      "checkLocationEnabled",
-    //                                                      "(Landroid/content/Context;)Z",
-    //                                                      QtAndroid::androidActivity().object());
+    return QJniObject::callStaticMethod<jboolean>("com/vedder/vesc/Utils",
+                                                "checkLocationEnabled",
+                                                "(Landroid/content/Context;)Z",
+                                                QNativeInterface::QAndroidApplication::context().object());
 #else
     return true;
 #endif

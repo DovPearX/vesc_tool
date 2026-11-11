@@ -32,7 +32,7 @@ DEFINES += VT_GIT_COMMIT=$$VT_GIT_COMMIT
 QT_LOGGING_RULES="qt.qml.connections=false"
 #CONFIG += qtquickcompiler
 
-CONFIG += c++11
+CONFIG += c++17
 CONFIG += resources_big
 
 ios: {
@@ -40,6 +40,8 @@ ios: {
 }
 
 android: {
+    ANDROID_MIN_SDK_VERSION = 28
+    ANDROID_TARGET_SDK_VERSION = 35
     QMAKE_LFLAGS += -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384
     CONFIG       += build_mobile
 }
@@ -335,13 +337,7 @@ build_original {
 }
 
 DISTFILES += \
-    android/AndroidManifest.xml \
-    android/gradle/wrapper/gradle-wrapper.jar \
-    android/gradlew \
-    android/gradlew.bat \
-    android/res/values/libs.xml \
-    android/build.gradle \
-    android/gradle/wrapper/gradle-wrapper.properties \
+    android/AndroidManifest.xml.in \
     android/src/com/vedder/vesc/VForegroundService.java \
     android/src/com/vedder/vesc/Utils.java
 
