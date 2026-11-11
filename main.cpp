@@ -37,6 +37,7 @@
 #include <QSettings>
 #include <QFontDatabase>
 #include <QPixmapCache>
+#include <QQuickWindow>
 
 #include "tcphub.h"
 
@@ -163,6 +164,8 @@ static void addFonts() {
 
 int main(int argc, char *argv[])
 {
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+
     // Settings
     QCoreApplication::setOrganizationName("VESC");
     QCoreApplication::setOrganizationDomain("vesc-project.com");
